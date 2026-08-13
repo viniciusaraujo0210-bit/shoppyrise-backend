@@ -117,6 +117,7 @@ export async function rotasIA(app) {
                                                               : "Google indisponível agora. Tente de novo em instantes.",
                                 });
                      }
+// build-retry
 
               const j = await r.json().catch(() => ({}));
                      if (!r.ok) {
