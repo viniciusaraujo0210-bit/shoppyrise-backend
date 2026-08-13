@@ -17,7 +17,10 @@ if (env.DATABASE_URL) {
   const { Pool } = await import("pg");
   const pool = new Pool({
     connectionString: env.DATABASE_URL,
-    ssl: producao ? { rejectUnauthorized: true } : false,
+    /* rejectUnauthorized:false porque o Postgres interno do Railway (e de
+       várias outras hospedagens) usa certificado autoassinado — a conexão
+       já roda dentro da rede privada deles, então isso é seguro aqui. */
+    ssl: producao ? { rejectUnauthorized: false } : false,
     max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
