@@ -30,21 +30,31 @@ const TEMPO_MAX_GEMINI = 45000; // 45s pra o Google responder
    apresentação a investidor não travar no meio. */
 const LIMITE_DIARIO_GERACOES = 10;
 
-async function contagemHoje(usuarioId) {
+/* Reserva a cota ANTES de chamar o Gemini — não só conta depois.
+   Ler a contagem e só incrementar mais tarde deixa uma brecha: duas
+   requisições do mesmo cliente, em paralelo, podem ler o mesmo valor
+   e as duas passarem no limite. O UPDATE ... WHERE contagem < limite
+   dentro do próprio INSERT ON CONFLICT é atômico — o banco garante
+   que só uma delas consegue incrementar quando já tá no limite.
+   Se a geração falhar depois, liberarCota devolve a vaga: tentativa
+   que não deu certo não consome cota do cliente. */
+async function reservarCota(usuarioId) {
      const { rows } = await db.query(
-            `SELECT contagem FROM geracoes_ia_dia WHERE usuario_id = $1 AND dia = current_date`,
-            [usuarioId]
-     );
-     return rows[0]?.contagem || 0;
-}
-
-/* Só chamada depois que a geração deu certo — tentativa que falhou
-   (foto travada, Google fora do ar) não consome a cota do cliente. */
-async function registrarGeracao(usuarioId) {
-     await db.query(
             `INSERT INTO geracoes_ia_dia (usuario_id, dia, contagem)
              VALUES ($1, current_date, 1)
-             ON CONFLICT (usuario_id, dia) DO UPDATE SET contagem = geracoes_ia_dia.contagem + 1`,
+             ON CONFLICT (usuario_id, dia) DO UPDATE
+               SET contagem = geracoes_ia_dia.contagem + 1
+               WHERE geracoes_ia_dia.contagem < $2
+             RETURNING contagem`,
+            [usuarioId, LIMITE_DIARIO_GERACOES]
+     );
+     return rows.length > 0;
+}
+
+async function liberarCota(usuarioId) {
+     await db.query(
+            `UPDATE geracoes_ia_dia SET contagem = contagem - 1
+             WHERE usuario_id = $1 AND dia = current_date AND contagem > 0`,
             [usuarioId]
      );
 }
@@ -82,8 +92,8 @@ export async function rotasIA(app) {
                      }
 
                      if (!req.demo) {
-                                const usadas = await contagemHoje(req.usuarioId);
-                                if (usadas >= LIMITE_DIARIO_GERACOES) {
+                                const reservou = await reservarCota(req.usuarioId);
+                                if (!reservou) {
                                              return reply.status(429).send({
                                                             erro: `Limite de ${LIMITE_DIARIO_GERACOES} gerações por dia atingido. Volte amanhã pra gerar mais.`,
                                              });
@@ -107,12 +117,14 @@ export async function rotasIA(app) {
                                 if (!rimg.ok) throw new Error(`download falhou (${rimg.status})`);
                                 const buf = Buffer.from(await rimg.arrayBuffer());
                                 if (buf.length > TAMANHO_MAX_IMAGEM) {
+                                             if (!req.demo) await liberarCota(req.usuarioId);
                                              return reply.status(400).send({ erro: "Foto do produto grande demais." });
                                 }
                                 ref = { data: buf.toString("base64"), mime: rimg.headers.get("content-type") || "image/jpeg" };
                      } catch (e) {
                                 const motivo = e?.name === "AbortError" ? "timeout ao baixar a foto" : e?.message || "erro ao baixar";
                                 req.log.warn({ url: imagemProdutoUrl, motivo }, "falha ao baixar foto do produto");
+                                if (!req.demo) await liberarCota(req.usuarioId);
                                 return reply.status(400).send({
                                              erro:
                                                             e?.name === "AbortError"
@@ -143,6 +155,7 @@ export async function rotasIA(app) {
                      } catch (e) {
                                 const motivo = e?.name === "AbortError" ? "timeout" : e?.message || "erro";
                                 req.log.warn({ motivo }, "falha ao chamar Gemini");
+                                if (!req.demo) await liberarCota(req.usuarioId);
                                 return reply.status(502).send({
                                              erro:
                                                             e?.name === "AbortError"
@@ -157,11 +170,14 @@ export async function rotasIA(app) {
                                 const msg = j?.error?.message || `Erro ${r.status}`;
                                 if (/API key not valid|API_KEY_INVALID/i.test(msg)) {
                                              req.log.error("GEMINI_API_KEY inválida ou revogada");
+                                             if (!req.demo) await liberarCota(req.usuarioId);
                                              return reply.status(502).send({ erro: "Chave de IA inválida no servidor. Avise o suporte." });
                                 }
                                 if (r.status === 429) {
+                                             if (!req.demo) await liberarCota(req.usuarioId);
                                              return reply.status(429).send({ erro: "Limite da IA atingido. Espere um minuto." });
                                 }
+                                if (!req.demo) await liberarCota(req.usuarioId);
                                 return reply.status(502).send({ erro: msg });
                      }
 
@@ -169,12 +185,13 @@ export async function rotasIA(app) {
                      const img = parts.find((p) => p.inlineData?.data);
                      if (!img) {
                                 const txt = parts.find((p) => p.text)?.text;
+                                if (!req.demo) await liberarCota(req.usuarioId);
                                 return reply.status(422).send({
                                              erro: txt ? `O modelo recusou: ${txt.slice(0, 140)}` : "O modelo não devolveu imagem.",
                                 });
                      }
 
-              if (!req.demo) await registrarGeracao(req.usuarioId);
+              /* Sucesso: a cota já foi contada lá em cima, na reserva. */
                      return { imagemBase64: img.inlineData.data, mime: img.inlineData.mimeType || "image/png" };
             }
           );
