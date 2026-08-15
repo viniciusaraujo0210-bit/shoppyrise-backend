@@ -20,7 +20,8 @@ import { rotasIA } from "./rotas/ia.js";
 
 const app = Fastify({
   logger,
-  trustProxy: true,           // IP real chega no rate limit quando atrás de CDN
+  trustProxy: 1,               // confia só no proxy do Railway (1 salto) — não em qualquer
+                                // X-Forwarded-For que o próprio cliente possa forjar
   bodyLimit: 256 * 1024,      // 256 KB — corta payload gigante que estoura memória
 });
 
@@ -57,7 +58,11 @@ await app.register(cookie, { secret: env.COOKIE_SECRET });
 await app.register(rateLimit, {
   max: 120,
   timeWindow: "1 minute",
-  keyGenerator: (req) => req.headers["cf-connecting-ip"] || req.ip,
+  /* req.ip já vem correto do trustProxy acima. Um header tipo
+     cf-connecting-ip só seria confiável se o Cloudflare estivesse na
+     frente — não é o caso aqui, e um cliente podia mandar qualquer
+     valor nele pra sempre cair num balde novo e furar o limite. */
+  keyGenerator: (req) => req.ip,
   errorResponseBuilder: () => ({ erro: "Muitas requisições. Aguarde um minuto." }),
 });
 
