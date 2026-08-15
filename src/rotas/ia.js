@@ -53,14 +53,14 @@ async function buscaComTempoLimite(url, opcoes, tempoLimiteMs) {
      const controle = new AbortController();
      const foraDoTempo = setTimeout(() => controle.abort(), tempoLimiteMs);
      try {
-         return await fetch(url, { ...opcoes, signal: controle.signal });
+            return await fetch(url, { ...opcoes, signal: controle.signal });
      } finally {
             clearTimeout(foraDoTempo);
      }
 }
 
 export async function rotasIA(app) {
-     app.post(
+    app.post(
             "/api/ia/influenciadora",
         {
                  preHandler: autenticado,
