@@ -129,6 +129,17 @@ export async function migrar() {
       criado_em  timestamptz NOT NULL DEFAULT now()
     );
 
+    /* Cota diária de geração de influenciadora (IA). Uma linha por
+       usuário por dia — conta demo nunca grava aqui, então nunca
+       esbarra em limite. Cliente real: 10 por dia, contadas só nas
+       gerações que deram certo (tentativa que falhou não gasta cota). */
+    CREATE TABLE IF NOT EXISTS geracoes_ia_dia (
+      usuario_id text NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+      dia        date NOT NULL DEFAULT current_date,
+      contagem   int  NOT NULL DEFAULT 0,
+      PRIMARY KEY (usuario_id, dia)
+    );
+
     CREATE INDEX IF NOT EXISTS ix_sessoes_expira ON sessoes (expira_em);
     CREATE INDEX IF NOT EXISTS ix_estruturas_user ON estruturas (usuario_id, criado_em DESC);
     CREATE INDEX IF NOT EXISTS ix_produtos_cat ON produtos (categoria);
