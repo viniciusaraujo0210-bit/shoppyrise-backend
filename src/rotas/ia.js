@@ -60,7 +60,7 @@ async function buscaComTempoLimite(url, opcoes, tempoLimiteMs) {
 }
 
 export async function rotasIA(app) {
-    app.post(
+     app.post(
             "/api/ia/influenciadora",
         {
                  preHandler: autenticado,
