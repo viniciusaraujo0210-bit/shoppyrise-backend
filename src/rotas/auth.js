@@ -78,9 +78,12 @@ export async function rotasAuth(app) {
     );
     const u = rows[0];
 
-    if (u?.bloqueado_ate && new Date(u.bloqueado_ate) > new Date())
-      return reply.status(429).send({ erro: "Conta bloqueada por tentativas. Tente em 15 minutos." });
-
+    /* A senha é conferida ANTES de olhar o bloqueio: se o bloqueio
+       fosse checado primeiro, um 429 só nesse caso (e nunca pra
+       e-mail inexistente) dava pra descobrir quais e-mails são
+       clientes seus sem saber a senha — e ainda mais rápido, porque
+       pulava o hash. Todo mundo sem senha certa passa pelo mesmo
+       caminho (hash + 401), exista a conta ou não. */
     const ok = await conferirSenha(u?.senha_hash || HASH_FALSO, p.data.senha);
 
     if (!u || !ok || !u.ativo) {
@@ -92,6 +95,9 @@ export async function rotasAuth(app) {
       }
       return reply.status(401).send({ erro: "E-mail ou senha inválidos." });
     }
+
+    if (u.bloqueado_ate && new Date(u.bloqueado_ate) > new Date())
+      return reply.status(429).send({ erro: "Conta bloqueada por tentativas. Tente em 15 minutos." });
 
     await db.query(`UPDATE usuarios SET falhas = 0, bloqueado_ate = NULL WHERE id = $1`, [u.id]);
     await abrirSessao(reply, u.id);
