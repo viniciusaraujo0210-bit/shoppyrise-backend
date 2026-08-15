@@ -14,8 +14,7 @@ import { cifrar } from "../lib/cripto.js";
    Dados de demonstração — apenas em contas marcadas como demo.
    Toda conta de cliente começa zerada e preenche só com venda real.
 ------------------------------------------------------------------ */
-const SERIE_DEMO = [820, 1150, 940, 1380, 1210, 1620, 1490,
-                    1680, 1950, 1740, 2280, 2050, 2840, 2140];
+const SERIE_DEMO = [7100, 8200, 11400, 16800, 19500, 17300, 16580, 6180, 1230, 3240, 4120, 3780, 5240, 4850];
 
 /* Semana e mês são SOMADOS da própria série, para o gráfico e os
    cartões nunca se contradizerem. */
@@ -38,7 +37,7 @@ function DADOS_DEMO() {
   return {
     resumo: {
       hoje: doDia, semana, mes,
-      cliques: 96400, vendas: 812, estruturas: 34,
+      cliques: 96400, vendas: 742, estruturas: 34,
     },
     serie: serie.map(({ d, v }) => ({ d, v })),
     canais: [
