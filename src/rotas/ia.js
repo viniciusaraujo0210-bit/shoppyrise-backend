@@ -17,6 +17,7 @@
 
 import { autenticado } from "../middlewares/auth.js";
 import { env } from "../lib/env.js";
+import { db } from "../lib/db.js";
 
 const GEMINI_URL =
      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent";
@@ -24,12 +25,35 @@ const GEMINI_URL =
 const TAMANHO_MAX_IMAGEM = 6 * 1024 * 1024; // 6 MB — foto de produto normal não passa disso
 const TEMPO_MAX_DOWNLOAD = 15000; // 15s pra baixar a foto do produto
 const TEMPO_MAX_GEMINI = 45000; // 45s pra o Google responder
+/* Cota diária de gerações por cliente real. A conta demo (req.demo)
+   nunca passa por aqui — pode gerar quantas vezes quiser, pra
+   apresentação a investidor não travar no meio. */
+const LIMITE_DIARIO_GERACOES = 10;
+
+async function contagemHoje(usuarioId) {
+     const { rows } = await db.query(
+            `SELECT contagem FROM geracoes_ia_dia WHERE usuario_id = $1 AND dia = current_date`,
+            [usuarioId]
+     );
+     return rows[0]?.contagem || 0;
+}
+
+/* Só chamada depois que a geração deu certo — tentativa que falhou
+   (foto travada, Google fora do ar) não consome a cota do cliente. */
+async function registrarGeracao(usuarioId) {
+     await db.query(
+            `INSERT INTO geracoes_ia_dia (usuario_id, dia, contagem)
+             VALUES ($1, current_date, 1)
+             ON CONFLICT (usuario_id, dia) DO UPDATE SET contagem = geracoes_ia_dia.contagem + 1`,
+            [usuarioId]
+     );
+}
 
 async function buscaComTempoLimite(url, opcoes, tempoLimiteMs) {
      const controle = new AbortController();
      const foraDoTempo = setTimeout(() => controle.abort(), tempoLimiteMs);
      try {
-            return await fetch(url, { ...opcoes, signal: controle.signal });
+         return await fetch(url, { ...opcoes, signal: controle.signal });
      } finally {
             clearTimeout(foraDoTempo);
      }
@@ -55,6 +79,15 @@ export async function rotasIA(app) {
                      }
                      if (typeof imagemProdutoUrl !== "string" || !/^https:\/\/[^ ]+$/.test(imagemProdutoUrl)) {
                                 return reply.status(400).send({ erro: "Foto do produto inválida." });
+                     }
+
+                     if (!req.demo) {
+                                const usadas = await contagemHoje(req.usuarioId);
+                                if (usadas >= LIMITE_DIARIO_GERACOES) {
+                                             return reply.status(429).send({
+                                                            erro: `Limite de ${LIMITE_DIARIO_GERACOES} gerações por dia atingido. Volte amanhã pra gerar mais.`,
+                                             });
+                                }
                      }
 
               let ref;
@@ -141,7 +174,8 @@ export async function rotasIA(app) {
                                 });
                      }
 
-              return { imagemBase64: img.inlineData.data, mime: img.inlineData.mimeType || "image/png" };
+              if (!req.demo) await registrarGeracao(req.usuarioId);
+                     return { imagemBase64: img.inlineData.data, mime: img.inlineData.mimeType || "image/png" };
             }
           );
 }
