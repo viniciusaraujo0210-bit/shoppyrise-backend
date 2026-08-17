@@ -74,6 +74,10 @@ export async function rotasIA(app) {
             "/api/ia/influenciadora",
         {
                  preHandler: autenticado,
+                 // foto própria em base64 é maior que o limite padrão de 256KB do
+                 // servidor (bodyLimit global em server.js) — só esta rota precisa
+                 // de mais espaço, o resto do app continua protegido no limite baixo.
+                 bodyLimit: 9 * 1024 * 1024,
                  // custa dinheiro de verdade por chamada — limite bem mais apertado
                  // que o geral, pra uma conta comprometida não estourar a fatura.
                  config: { rateLimit: { max: 12, timeWindow: "10 minutes" } },
@@ -83,12 +87,30 @@ export async function rotasIA(app) {
                                 return reply.status(501).send({ erro: "IA_NAO_CONFIGURADA" });
                      }
 
-              const { prompt, imagemProdutoUrl } = req.body || {};
+              const { prompt, imagemProdutoUrl, imagemProdutoBase64, imagemProdutoMime } = req.body || {};
                      if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 4000) {
                                 return reply.status(400).send({ erro: "Prompt inválido." });
                      }
-                     if (typeof imagemProdutoUrl !== "string" || !/^https:\/\/[^ ]+$/.test(imagemProdutoUrl)) {
+
+                     /* Cliente pode mandar a URL de um produto do catálogo OU a
+                        foto própria dele em base64 — os dois caem no mesmo
+                        formato { data, mime } logo abaixo, pro resto da rota
+                        (chamada ao Gemini) nem precisar saber qual dos dois foi. */
+                     const MIMES_PERMITIDOS = ["image/jpeg", "image/png", "image/webp"];
+                     const usaUpload = typeof imagemProdutoBase64 === "string" && imagemProdutoBase64.length > 0;
+
+                     if (!usaUpload && (typeof imagemProdutoUrl !== "string" || !/^https:\/\/[^ ]+$/.test(imagemProdutoUrl))) {
                                 return reply.status(400).send({ erro: "Foto do produto inválida." });
+                     }
+                     if (usaUpload) {
+                                if (!MIMES_PERMITIDOS.includes(imagemProdutoMime)) {
+                                             return reply.status(400).send({ erro: "Formato de imagem não suportado. Envie JPG, PNG ou WEBP." });
+                                }
+                                // tamanho aproximado do binário decodificado (base64 infla ~33%) — barato e evita decodificar payload gigante à toa
+                                const tamanhoAprox = Math.ceil((imagemProdutoBase64.length * 3) / 4);
+                                if (tamanhoAprox > TAMANHO_MAX_IMAGEM) {
+                                             return reply.status(400).send({ erro: "Foto do produto grande demais (máx. 6 MB)." });
+                                }
                      }
 
                      if (!req.demo) {
@@ -101,6 +123,10 @@ export async function rotasIA(app) {
                      }
 
               let ref;
+                     if (usaUpload) {
+                                /* Foto já veio do próprio navegador do cliente — nada pra baixar. */
+                                ref = { data: imagemProdutoBase64, mime: imagemProdutoMime };
+                     } else {
                      try {
                                 const rimg = await buscaComTempoLimite(
                                              imagemProdutoUrl,
@@ -131,6 +157,7 @@ export async function rotasIA(app) {
                                                  ? "A foto desse produto demorou demais pra carregar. Tenta de novo em alguns segundos."
                                                               : "Não consegui baixar a foto do produto. Tenta novamente.",
                                 });
+                     }
                      }
 
               let r;
