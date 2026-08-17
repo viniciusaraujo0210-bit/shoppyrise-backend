@@ -33,7 +33,7 @@ export async function rotasShopeeCatalogo(app) {
         const produtos = await buscarMaisVendidos({
           appId: env.SHOPEE_APP_ID,
           appSecret: env.SHOPEE_APP_SECRET,
-          limite: 30,
+          limite: 100,
         });
         cache = { produtos, expiraEm: Date.now() + TEMPO_CACHE_MS };
         return { produtos, cache: false };
