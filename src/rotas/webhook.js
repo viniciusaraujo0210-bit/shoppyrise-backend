@@ -34,6 +34,8 @@ export const SENHA_PADRAO = "12345678";
 const PLANO_POR_OFERTA = {
   "5FX6U4G": "vitalicio",
   ERJGAHB: "mensal",
+  NCZNGSQ: "vitalicio",
+  "6PF4SR2": "mensal",
 };
 
 /* A Wiven muda nome de campo entre versões; aceitamos os apelidos
@@ -41,13 +43,14 @@ const PLANO_POR_OFERTA = {
 function extrair(corpo) {
   const c = corpo || {};
   const d = c.data || c.payload || c;
-  const cli = d.customer || d.cliente || d.buyer || {};
+  const cli = d.client || d.customer || d.cliente || d.buyer || {};
 
   const email = (cli.email || d.email || d.customer_email || "").toString().trim().toLowerCase();
   const nome = (cli.name || cli.nome || d.name || d.customer_name || "").toString().trim();
   const oferta = (d.offer_code || d.offer || d.oferta || d.offerCode ||
     (d.offer && d.offer.code) || "").toString().trim().toUpperCase();
-  const transacao = (d.id || d.transaction_id || d.order_id || d.transactionId || "").toString().trim();
+  const transacao = ((d.transaction && d.transaction.id) ||
+    d.id || d.transaction_id || d.order_id || d.transactionId || "").toString().trim();
   const status = (d.status || c.status || c.event || c.type || "").toString().toLowerCase();
 
   return { email, nome, oferta, transacao, status };
@@ -80,6 +83,8 @@ export async function rotasWebhook(app) {
     if (!z.string().email().safeParse(email).success)
       return { ok: true, ignorado: "sem e-mail valido" };
 
+    if (!PLANO_POR_OFERTA[oferta])
+      req.log.error({ oferta, email }, "oferta sem plano mapeado - entregando mensal");
     const plano = PLANO_POR_OFERTA[oferta] || "mensal";
 
     /* ---------- 3. idempotência ---------- */
