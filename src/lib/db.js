@@ -140,9 +140,24 @@ export async function migrar() {
       PRIMARY KEY (usuario_id, dia)
     );
 
+    /* Um afiliado = uma rota própria (shoppyrise.online/<slug>) com
+       os links de checkout dele. Ver src/rotas/afiliados.js. */
+    CREATE TABLE IF NOT EXISTS afiliados (
+      id             text PRIMARY KEY,
+      nome           text NOT NULL,
+      email          text NOT NULL,
+      telefone       text,
+      slug           text UNIQUE NOT NULL,
+      link_mensal    text NOT NULL,
+      link_vitalicio text NOT NULL,
+      ativo          boolean NOT NULL DEFAULT true,
+      criado_em      timestamptz NOT NULL DEFAULT now()
+    );
+
     CREATE INDEX IF NOT EXISTS ix_sessoes_expira ON sessoes (expira_em);
     CREATE INDEX IF NOT EXISTS ix_estruturas_user ON estruturas (usuario_id, criado_em DESC);
     CREATE INDEX IF NOT EXISTS ix_produtos_cat ON produtos (categoria);
+    CREATE INDEX IF NOT EXISTS ix_afiliados_ativo ON afiliados (ativo);
   `);
 }
 
