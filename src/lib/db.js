@@ -154,10 +154,32 @@ export async function migrar() {
       criado_em      timestamptz NOT NULL DEFAULT now()
     );
 
+    /* Pedido de reembolso, preenchido pelo próprio cliente sem login.
+       Ver src/rotas/reembolsos.js. */
+    CREATE TABLE IF NOT EXISTS reembolsos (
+      id               text PRIMARY KEY,
+      nome             text NOT NULL,
+      email            text NOT NULL,
+      telefone         text NOT NULL,
+      cpf              text NOT NULL,
+      pedido           text NOT NULL,
+      produto          text NOT NULL,
+      data_compra      text NOT NULL,
+      valor            numeric(10,2) NOT NULL,
+      forma_pagamento  text NOT NULL,
+      ultimos_digitos  text,
+      motivo           text NOT NULL,
+      detalhe          text,
+      tentou_suporte   boolean NOT NULL DEFAULT false,
+      status           text NOT NULL DEFAULT 'pendente',
+      criado_em        timestamptz NOT NULL DEFAULT now()
+    );
+
     CREATE INDEX IF NOT EXISTS ix_sessoes_expira ON sessoes (expira_em);
     CREATE INDEX IF NOT EXISTS ix_estruturas_user ON estruturas (usuario_id, criado_em DESC);
     CREATE INDEX IF NOT EXISTS ix_produtos_cat ON produtos (categoria);
     CREATE INDEX IF NOT EXISTS ix_afiliados_ativo ON afiliados (ativo);
+    CREATE INDEX IF NOT EXISTS ix_reembolsos_status ON reembolsos (status, criado_em DESC);
   `);
 }
 
