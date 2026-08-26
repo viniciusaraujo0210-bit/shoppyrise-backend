@@ -117,7 +117,7 @@ export async function rotasIA(app) {
                                 const reservou = await reservarCota(req.usuarioId);
                                 if (!reservou) {
                                              return reply.status(429).send({
-                                                            erro: `Limite de ${LIMITE_DIARIO_GERACOES} gerações por dia atingido. Volte amanhã pra gerar mais.`,
+                                                            erro: `Você excedeu o limite diário de ${LIMITE_DIARIO_GERACOES} gerações. O limite é renovado todo dia à 00:00.`,
                                              });
                                 }
                      }
