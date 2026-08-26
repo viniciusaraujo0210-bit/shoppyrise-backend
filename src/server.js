@@ -19,6 +19,7 @@ import { rotasWebhook } from "./rotas/webhook.js";
 import { rotasIA } from "./rotas/ia.js";
 import { rotasShopeeCatalogo } from "./rotas/shopeeCatalogo.js";
 import { rotasAfiliados } from "./rotas/afiliados.js";
+import { rotasReembolsos } from "./rotas/reembolsos.js";
 
 const app = Fastify({
   logger,
@@ -86,6 +87,7 @@ await app.register(rotasWebhook);
 await app.register(rotasIA);
 await app.register(rotasShopeeCatalogo);
 await app.register(rotasAfiliados);
+await app.register(rotasReembolsos);
 
 app.get("/saude", async () => ({ ok: true, banco: env.DATABASE_URL ? "postgres" : "pglite" }));
 
